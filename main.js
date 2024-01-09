@@ -1,47 +1,78 @@
-var rings = 7;
-var possible_radius;
-var padding = 10;
+const svg = document.getElementsByTagName("svg")[0]; // defer
+const rings = 7;
+const padding = 10;
 
-function setup() {
-    createCanvas(windowWidth, windowHeight);
-    windowResized();
+var log_animation_duration = -10;
+
+function updateAnimationDuration(animation_duration_db) {
+  const duration = Math.pow(Math.E, -animation_duration_db / 10);
+  svg.style["-webkit-animation-duration"] = `${duration}s`;
 }
 
-function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
-    clear();
-    for(let i = rings-1; i >= 0; i--) {
-        for(let j = 0; j < (2 << i); j++) {
-            let angle_part = Math.PI / (1 << i);
-            let angle_offset = angle_part * (j + 2);
-            possible_radius = Math.min(windowWidth, windowHeight) / 2 - padding;
-            arc_fragment_in_center(angle_offset, angle_offset + angle_part/2, possible_radius*i/rings, possible_radius*(i+1)/rings);
-        }
+function changeAnimationDuration(dl) {
+  log_animation_duration += dl;
+  updateAnimationDuration(log_animation_duration);
+}
+
+const keydown_handler = {
+  ArrowRight: () => changeAnimationDuration(+1),
+  ArrowLeft: () => changeAnimationDuration(-1),
+  ArrowUp: () => changeAnimationDuration(+1),
+  ArrowDown: () => changeAnimationDuration(-1),
+};
+
+document.addEventListener("keydown", (e) => {
+  const k = e.key;
+
+  if (keydown_handler.hasOwnProperty(k)) {
+    keydown_handler[k](k);
+  }
+});
+
+document.addEventListener(
+  "load",
+  (_event) => {
+    for (let i = rings - 1; i >= 0; i--) {
+      for (let j = 0; j < 2 << i; j++) {
+        let angle_part = (2 * Math.PI) / (1 << i);
+        let angle_offset = -Math.PI / 2 + angle_part * (j + 2);
+        arc_fragment_in_center(
+          angle_offset,
+          angle_offset + angle_part / 2,
+          i / rings,
+          (i + 1) / rings
+        );
+      }
     }
-}
+  },
+  true
+);
 
-function arc_fragment_in_center(start_angle, stop_angle, min_radius, max_radius) {
-    fill(0, 0, 0);
-    noStroke();
-    arc(
-        width/2-1,
-        height/2-1,
-        2*max_radius+4,
-        2*max_radius+4,
-        start_angle,
-        stop_angle,
-    );
-    fill(255, 255, 255);
-    noStroke();
-    arc(
-        width/2,
-        height/2,
-        2*min_radius,
-        2*min_radius,
-        start_angle-1,
-        stop_angle+1,
-    );
-}
-
-function draw() {
+function arc_fragment_in_center(
+  start_angle,
+  stop_angle,
+  min_radius,
+  max_radius
+) {
+  const arc = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  const mean_angle = (start_angle + stop_angle) / 2;
+  ar = 5 * max_radius;
+  ax1 = 5 + ar * Math.cos(start_angle);
+  ay1 = 5 + ar * Math.sin(start_angle);
+  ax2 = 5 + ar * Math.cos(mean_angle);
+  ay2 = 5 + ar * Math.sin(mean_angle);
+  ax3 = 5 + ar * Math.cos(stop_angle);
+  ay3 = 5 + ar * Math.sin(stop_angle);
+  br = 5 * min_radius;
+  bx1 = 5 + br * Math.cos(start_angle);
+  by1 = 5 + br * Math.sin(start_angle);
+  bx2 = 5 + br * Math.cos(mean_angle);
+  by2 = 5 + br * Math.sin(mean_angle);
+  bx3 = 5 + br * Math.cos(stop_angle);
+  by3 = 5 + br * Math.sin(stop_angle);
+  arc.setAttribute(
+    "d",
+    `M${ax1} ${ay1} A ${ar} ${ar} 0 0 1 ${ax2} ${ay2} A ${ar} ${ar} 0 0 1 ${ax3} ${ay3} L ${bx3} ${by3} A ${br} ${br} 0 0 0 ${bx2} ${by2} A ${br} ${br} 0 0 0 ${bx1} ${by1} L ${ax1} ${ay1}`
+  );
+  svg.appendChild(arc);
 }
