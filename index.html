@@ -5,13 +5,29 @@
     <title>Strobe tuner</title>
     <style>
       html,
-      body,
-      svg {
+      body {
         width: 100%;
         height: 100%;
-        margin: 0;
+      }
+      button {
+        display: inline-block;
+      }
+      .controls {
+        text-align: center;
+      }
+      svg,
+      input {
+        display: block;
+        margin: auto;
+        margin-bottom: 1em;
+      }
+      svg {
+        width: 400px;
+        height: 400px;
         overflow: hidden;
-        background-color: #f0f0f0;
+        background-color: #eee;
+        padding: 10px;
+        border: black 1px solid;
       }
       @keyframes rotating {
         from {
@@ -28,6 +44,19 @@
     <script type="text/javascript" src="main.js" defer></script>
   </head>
   <body>
-    <svg class="rotating" viewBox="0 0 10 10"></svg>
+    <datalist id="markers">
+      <option value="8.5"></option>
+      <option value="10"></option>
+      <option value="12"></option>
+      <option value="15"></option>
+      <option value="20"></option>
+      <option value="30"></option>
+      <option value="60"></option>
+    </datalist>
+    <div class="controls">
+      <button id="start">START</button>
+      <button id="stop">STOP</button>
+    </div>
+    <input type="range" id="fps" list="markers" max="60" />
   </body>
 </html>
