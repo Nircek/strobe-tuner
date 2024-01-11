@@ -8,14 +8,16 @@ const quantsPerGroup = +(splittedArgs[1] ?? 3);
 const quantRate = quantsPerGroup << rings;
 
 /**
- * TODO: Change frequency of tuning.
+ * Change frequency of tuning.
  * @param {number} df
  */
-function changeFrequency(df) {}
+function changeFrequency(df) {
+  refFreq = Math.max(refFreq + df, 0);
+}
 
 const keydownHandler = {
-  ArrowRight: () => changeFrequency(+1),
-  ArrowLeft: () => changeFrequency(-1),
+  ArrowRight: () => changeFrequency(+0.01),
+  ArrowLeft: () => changeFrequency(-0.01),
   ArrowUp: () => changeFrequency(+1),
   ArrowDown: () => changeFrequency(-1),
 };
@@ -28,9 +30,8 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-const quantHandlers = Array.from(
-  Array(rings),
-  (_v, ring) => new Array(quantRate >> ring)
+const quantHandlers = Array.from(Array(rings), (_v, ring) =>
+  Array(quantRate >> ring)
 );
 
 /**
@@ -64,7 +65,7 @@ function updateQuants(quantsValues) {
  * @param  {...number} quants
  */
 function setSingleQuants(...quants) {
-  const aqs = Array.from(new Array(quantRate), () => 0);
+  const aqs = Array(quantRate).fill(0);
   for (const q of quants) {
     aqs[q % quantRate] += 1;
   }
@@ -136,6 +137,7 @@ function arcFragmentInCenter(startAngle, stopAngle, minRadius, maxRadius) {
 let start;
 let previousTimeStamp;
 let animationActive = false;
+let offset = 0;
 
 /**
  * Animate quant SVG.
@@ -147,23 +149,28 @@ function step(timeStamp) {
     return;
   }
   if (start === undefined) {
-    start = timeStamp;
+    previousTimeStamp = start = timeStamp;
   }
   const elapsed = timeStamp - start;
+  const frameDelay = timeStamp - previousTimeStamp;
 
   if (previousTimeStamp !== timeStamp) {
     const fps = Math.floor(1000 / (timeStamp - previousTimeStamp));
     fpsHandle.value = `${Number.isFinite(fps) ? fps : 0}`;
-    if ((elapsed / 6000) % 2 < 1) {
-      updateQuants(Array.from(new Array(quantRate), Math.random));
-    } else {
-      const offset = Math.floor(quantRate * ((elapsed % 6000) / 1000) ** 2);
-      const arr = Array.from(
-        new Array(Math.floor((quantRate * (elapsed % 6000)) / 1e5 + 1)),
-        (_, i) => i + offset
-      );
-      setSingleQuants(...arr);
+    const playbackPercent = (elapsed / soundLength) * sampleRate;
+    playbackHandle.value = `${1e3 - Math.abs((playbackPercent % 2e3) - 1e3)}`;
+    const duration = Math.floor((frameDelay / 1000) * sampleRate);
+    const slice = soundArray.slice(offset, offset + duration);
+    offset += duration;
+    if (offset > soundArray.length) offset -= soundArray.length;
+    const quantProbabilities = Array(quantRate).fill(0);
+    for (const [i, e] of slice.entries()) {
+      const t = (previousTimeStamp / 1000) * sampleRate + i;
+      const rotationPercent = (t / (sampleRate / refFreq)) % 1;
+      const quant = Math.floor(rotationPercent * quantRate);
+      quantProbabilities[quant] += Math.log(Math.abs(e) + 0.01) ** 64;
     }
+    updateQuants(quantProbabilities);
   }
   previousTimeStamp = timeStamp;
   window.requestAnimationFrame(step);
@@ -171,6 +178,9 @@ function step(timeStamp) {
 
 const fpsHandle = /** @type {HTMLInputElement} */ (
   document.getElementById("fps")
+);
+const playbackHandle = /** @type {HTMLInputElement} */ (
+  document.getElementById("playback")
 );
 
 /** @type {HTMLButtonElement} */ (
@@ -196,3 +206,52 @@ const fpsHandle = /** @type {HTMLInputElement} */ (
 generateQuantSVG();
 
 setSingleQuants(0);
+
+let refFreq = 440;
+const sampleRate = 48000;
+const soundLength = 10 * sampleRate;
+const freqRadius = 6;
+const startFreq = 2 * refFreq - freqRadius;
+const stopFreq = 2 * refFreq + freqRadius;
+
+// @ts-ignore
+document.getElementById("start_freq").innerText = `${startFreq} Hz`;
+// @ts-ignore
+document.getElementById("stop_freq").innerText = `${stopFreq} Hz`;
+
+/**
+ * Make the array be the array of cumulative sum.
+ * @param {number[]} arr
+ */
+function makeCumulative(arr) {
+  for (let i = 1; i < arr.length; i++) {
+    arr[i] = arr[i - 1] + arr[i];
+  }
+}
+
+/**
+ * Generate the linearly changing frequency sine wave.
+ * @param {number} start starting frequency
+ * @param {number} stop stopping frequenct
+ * @param {number} length length of data signal
+ * @return {(function(number): number)}
+ */
+function makeLinearFrequencySine(start, stop, length) {
+  // see https://www.mathworks.com/matlabcentral/answers/217746-implementing-a-sine-wave-with-linearly-changing-frequency
+  const freqStep = (stop - start) / length;
+  const freq = Array.from(new Array(length), (_, i) => start + freqStep * i);
+  makeCumulative(freq);
+  return (i) => Math.sin((2 * Math.PI * freq[i]) / sampleRate);
+}
+
+const freq1 = makeLinearFrequencySine(startFreq, stopFreq, soundLength);
+const freq3 = makeLinearFrequencySine(3 * startFreq, 3 * stopFreq, soundLength);
+
+const soundArray = Array.from(
+  Array(soundLength),
+  (_, i) => 0.7 * freq1(i) + 0.2 * freq3(i) + 0.1 * Math.random()
+);
+const reverseSoundArray = soundArray.map(
+  (_, i) => soundArray[soundArray.length - 1 - i]
+);
+soundArray.push(...reverseSoundArray);
