@@ -4,35 +4,34 @@
     <meta charset="utf-8" />
     <title>Strobe tuner</title>
     <style>
-      button {
-        display: inline-block;
-      }
       .controls {
         text-align: center;
       }
-      svg {
+      svg,
+      canvas {
         display: block;
-        margin: auto;
-        margin-bottom: 1em;
-      }
-      svg {
-        width: 400px;
-        height: 400px;
+        margin: 1em auto;
         overflow: hidden;
         background-color: #eee;
         padding: 10px;
         border: black 1px solid;
       }
-      @keyframes rotating {
-        from {
-          transform: rotate(0deg);
-        }
-        to {
-          transform: rotate(360deg);
-        }
+      svg {
+        height: 400px;
       }
-      .rotating {
-        animation: rotating 10s linear infinite;
+      .row {
+        display: flex;
+        justify-content: center;
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
+      .table-row {
+        display: table-row;
+      }
+      span,
+      input {
+        display: table-cell;
+        padding: 0 1em;
       }
     </style>
     <script type="text/javascript" src="main.js" defer></script>
@@ -50,17 +49,151 @@
     <datalist id="halfmarker">
       <option value="500"></option>
     </datalist>
-    <div class="controls">
+    <datalist id="m1">
+      <option value="1"></option>
+    </datalist>
+    <form class="controls">
       <button id="start">START</button>
       <button id="stop">STOP</button>
-      <br />
-      0 FPS
-      <input type="range" id="fps" list="fpsmarkers" max="60" />
-      60 FPS
-      <br />
-      <span id="start_freq"></span>
-      <input type="range" id="playback" list="halfmarker" max="1000" />
-      <span id="stop_freq"></span>
+      <button id="apply">APPLY</button>
+      <button id="clear">CLEAR</button>
+
+      <div class="row">
+        <div class="column">
+          <div class="table-row">
+            <span>0 FPS</span>
+            <input type="range" id="fps" list="fpsmarkers" max="60" />
+            <span>60 FPS</span>
+          </div>
+          <div class="table-row synthesis">
+            <span id="start_freq"></span>
+            <input type="range" id="playback" list="halfmarker" max="1000" />
+            <span id="stop_freq"></span>
+          </div>
+          <div class="table-row">
+            <span>Rings</span>
+            <input type="range" id="rings" min="3" max="10" value="7" />
+            <span></span>
+          </div>
+        </div>
+        <div class="column synthesis">
+          <div class="table-row">
+            <span>Frequency</span>
+            <input
+              type="range"
+              id="fund_f"
+              min="110"
+              max="880"
+              step="0.1"
+              value="440"
+            />
+            <span></span>
+          </div>
+          <div class="table-row">
+            <span>Radius</span>
+            <input
+              type="range"
+              id="f_radius"
+              min="0"
+              max="20"
+              step="0.1"
+              value="1"
+            />
+            <span></span>
+          </div>
+          <div class="table-row">
+            <span>Noise</span>
+            <input
+              type="range"
+              id="f0"
+              list="m1"
+              max="2"
+              step="0.1"
+              value="0"
+            />
+            <span></span>
+          </div>
+        </div>
+        <div class="column synthesis">
+          <div class="table-row">
+            <span>Fundamental</span>
+            <input
+              type="range"
+              id="f1"
+              list="m1"
+              max="2"
+              step="0.1"
+              value="1"
+            />
+            <span></span>
+          </div>
+          <div class="table-row">
+            <span>2nd harmonic</span>
+            <input
+              type="range"
+              id="f2"
+              list="m1"
+              max="2"
+              step="0.1"
+              value="0"
+            />
+            <span></span>
+          </div>
+          <div class="table-row">
+            <span>3rd harmonic</span>
+            <input
+              type="range"
+              id="f3"
+              list="m1"
+              max="2"
+              step="0.1"
+              value="0"
+            />
+            <span></span>
+          </div>
+        </div>
+        <div class="column synthesis">
+          <div class="table-row">
+            <span>4th</span>
+            <input
+              type="range"
+              id="f4"
+              list="m1"
+              max="2"
+              step="0.1"
+              value="0"
+            />
+            <span></span>
+          </div>
+          <div class="table-row">
+            <span>5th</span>
+            <input
+              type="range"
+              id="f5"
+              list="m1"
+              max="2"
+              step="0.1"
+              value="0"
+            />
+            <span></span>
+          </div>
+          <div class="table-row">
+            <span>6th</span>
+            <input
+              type="range"
+              id="f6"
+              list="m1"
+              max="2"
+              step="0.1"
+              value="0"
+            />
+            <span></span>
+          </div>
+        </div>
+      </div>
+    </form>
+    <div class="synthesis">
+      <canvas id="signal" width="400" height="200"></canvas>
     </div>
   </body>
 </html>
