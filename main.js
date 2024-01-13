@@ -10,8 +10,12 @@ let rings;
 let quantHandlers;
 
 let tuneFreq = 220;
-const sampleRate = 48000;
+let sampleRate = 48000;
 const soundLength = 20 * sampleRate;
+const soundArray = new Float32Array((3 * soundLength) / 2); // dirty repeating buffer
+let micSoundArray = new Float32Array();
+
+generateUserWave();
 
 let animationStart;
 let previousAnimationTime;
@@ -24,6 +28,10 @@ const fpsHandle = /** @type {HTMLInputElement} */ (
 );
 const playbackHandle = /** @type {HTMLInputElement} */ (
   document.getElementById("playback")
+);
+const ctx = /** @type {CanvasRenderingContext2D} */ (
+  // @ts-ignore
+  document.getElementById("signal").getContext("2d")
 );
 
 /** @type {HTMLButtonElement} */ (
@@ -54,7 +62,7 @@ const playbackHandle = /** @type {HTMLInputElement} */ (
   (e) => {
     e.preventDefault();
     generateQuantSVG();
-    soundArray = generateUserWave();
+    if (audioCtx === null) generateUserWave();
   },
   true
 );
@@ -69,8 +77,18 @@ const playbackHandle = /** @type {HTMLInputElement} */ (
   },
   true
 );
+/** @type {HTMLButtonElement} */ (
+  document.getElementById("mic")
+).addEventListener(
+  "click",
+  (e) => {
+    e.preventDefault();
+    if (audioCtx === null) startRecording();
+    else stopRecording();
+  },
+  true
+);
 
-let soundArray = generateUserWave();
 const ranges = "rings,fund_f,f_radius,f0,f1,f2,f3,f4,f5,f6,f7"
   .split(",")
   .map((e) => document.getElementById(e));
@@ -249,27 +267,60 @@ function step(timeStamp) {
     const fps = Math.floor(1000 / (timeStamp - previousAnimationTime));
     fpsHandle.value = `${Number.isFinite(fps) ? fps : 0}`;
 
-    let startSample = Math.floor(
-      ((previousAnimationTime - animationStart) / 1e3) * sampleRate
-    );
-    startSample %= soundLength;
-    let stopSample = Math.floor(
-      ((timeStamp - animationStart) / 1e3) * sampleRate
-    );
-    stopSample %= soundLength;
-    const playbackPercent = (stopSample / soundLength) * 2;
-    if (stopSample < startSample) stopSample += soundLength; // dirty repeating buffer
+    let slice;
 
-    playbackHandle.value = `${1e3 * (1 - Math.abs((playbackPercent % 2) - 1))}`;
+    let startSample;
+    if (audioCtx === null) {
+      startSample = Math.floor(
+        ((previousAnimationTime - animationStart) / 1e3) * sampleRate
+      );
+      startSample %= soundLength;
+      let stopSample = Math.floor(
+        ((timeStamp - animationStart) / 1e3) * sampleRate
+      );
+      stopSample %= soundLength;
+      const playbackPercent = (stopSample / soundLength) * 2;
+      if (stopSample < startSample) stopSample += soundLength; // dirty repeating buffer
 
-    const slice = soundArray.slice(startSample, stopSample);
-    const maxInSlice = slice.reduce((a, b) => Math.max(a, Math.abs(b)), 0);
+      playbackHandle.value = `${
+        1e3 * (1 - Math.abs((playbackPercent % 2) - 1))
+      }`;
+
+      slice = soundArray.slice(startSample, stopSample);
+    } else {
+      audioAnalyser.getFloatTimeDomainData(micSoundArray);
+      startSample = (audioCtx.currentTime % 1) * 48e3;
+      slice = micSoundArray;
+    }
+
+    for (let subslice = 0; subslice + 512 - 1 < slice.length; subslice += 512) {
+      let m = 0;
+      for (let i = 0; i < 512; i++) {
+        if (m < slice[subslice + i]) m = Math.abs(slice[subslice + i]);
+      }
+      for (let i = 0; i < 512; i++) {
+        slice[subslice + i] = slice[subslice + i] / m;
+      }
+    }
+
+    ctx.clearRect(0, 0, 400, 200);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    let x = 0;
+    let xOffset = 0;
+    for (xOffset = 0; slice[xOffset] < 0.99; xOffset++);
+    for (const d of slice.slice(xOffset, xOffset + 400)) {
+      const y = 100 - d * 90;
+      x ? ctx.lineTo(x++, y) : ctx.moveTo(x++, y);
+    }
+    ctx.stroke();
+
     const quantProbabilities = Array(quantRate).fill(0);
     for (const [i, e] of slice.entries()) {
       const t = (startSample + i) / sampleRate;
       const rotationPercent = (t * tuneFreq) % 1;
       const quant = Math.floor(rotationPercent * quantRate);
-      quantProbabilities[quant] += Math.abs(e) / maxInSlice > 0.9999 ? 1 : 0;
+      quantProbabilities[quant] += Math.abs(e) > 0.9999 ? 1 : 0;
     }
     updateQuants(quantProbabilities);
   }
@@ -304,7 +355,6 @@ function makeLinearFrequencySine(start, stop, length) {
 
 /**
  * Generate wave using user preferences.
- * @return {number[]}
  */
 function generateUserWave() {
   // @ts-ignore
@@ -319,42 +369,72 @@ function generateUserWave() {
   // @ts-ignore
   document.getElementById("stop_freq").innerText = `${stopFreq} Hz`;
 
-  const freq = Array.from(Array(7), (_, k) =>
+  const harmonic = Array.from(Array(7), (_, k) =>
     k == 0
       ? Math.random
       : makeLinearFrequencySine(k * startFreq, k * stopFreq, soundLength / 2)
   );
-
-  let soundArray = Array.from(Array(soundLength / 2), (_, i) =>
-    Array.from(
-      Array(7),
-      (_, k) =>
-        +(
-          // @ts-ignore
-          document.getElementById(`f${k}`).value
-        ) * freq[k](i)
-    ).reduce((a, b) => a + b, 0)
+  const as = Array.from(
+    Array(7),
+    (_, k) =>
+      +(
+        // @ts-ignore
+        document.getElementById(`f${k}`).value
+      )
   );
-  const soundPeak = soundArray.reduce((a, b) => Math.max(a, Math.abs(b)), 0);
-  soundArray = soundArray.map((e) => e / soundPeak);
-
-  const reverseSoundArray = soundArray.map(
-    (_, i) => soundArray[soundArray.length - 1 - i]
-  );
-  soundArray = soundArray.concat(reverseSoundArray);
-  soundArray = soundArray.concat(soundArray);
-
-  const ctx = /** @type {CanvasRenderingContext2D} */ (
-    // @ts-ignore
-    document.getElementById("signal").getContext("2d")
-  );
-  ctx.clearRect(0, 0, 400, 200);
-  ctx.beginPath();
-  const transform = (/** @type {number} */ a) => 100 * (1 - a);
-  ctx.moveTo(0, transform(soundArray[0]));
-  for (const [i, e] of soundArray.entries()) {
-    ctx.lineTo(i, transform(e));
+  for (let i = 0; i < soundLength / 2; i++) {
+    soundArray[i] = as
+      .map((a, k) => a * harmonic[k](i))
+      .reduce((a, b) => a + b, 0);
   }
-  ctx.stroke();
-  return soundArray;
+  for (let i = 0; i < soundLength / 2; i++) {
+    soundArray[soundLength - 1 - i] = soundArray[i];
+    soundArray[soundLength + i] = soundArray[i]; // dirty repeating buffer
+  }
+}
+
+/**
+ * Try to get permissions from user to record audio.
+ */
+function startRecording() {
+  navigator.mediaDevices
+    .getUserMedia({
+      audio: { noiseSuppression: false, echoCancellation: false },
+    })
+    .then(startedRecording)
+    .catch(console.log);
+}
+
+let audioCtx = null;
+let audioAnalyser;
+let audioStream;
+
+/**
+ * The function that gets called when user accepts recording.
+ * @param {any} stream
+ */
+function startedRecording(stream) {
+  document.styleSheets[0].insertRule(
+    ".synthesis{display:none;}",
+    document.styleSheets[0].cssRules.length
+  );
+  audioStream = stream;
+  audioCtx = new AudioContext();
+  audioAnalyser = audioCtx.createAnalyser();
+  micSoundArray = new Float32Array(audioAnalyser.fftSize);
+  audioCtx.createMediaStreamSource(stream).connect(audioAnalyser);
+  sampleRate = audioCtx.sampleRate;
+}
+
+/**
+ * Disable all audio recording.
+ */
+function stopRecording() {
+  document.styleSheets[0].deleteRule(
+    document.styleSheets[0].cssRules.length - 1
+  );
+  for (const t of audioStream.getAudioTracks()) t.stop();
+  audioCtx.close();
+  audioCtx = null;
+  sampleRate = 48000;
 }
