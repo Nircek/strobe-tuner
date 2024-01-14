@@ -33,6 +33,17 @@
         display: table-cell;
         padding: 0 1em;
       }
+      #fHz,
+      #fNote {
+        display: inline;
+        padding: 0;
+      }
+      sup {
+        font-size: 0.6em;
+        position: relative;
+        top: -0.5em;
+        line-height: 1;
+      }
     </style>
     <script type="text/javascript" src="main.js" defer></script>
   </head>
@@ -194,5 +205,16 @@
       </div>
     </form>
     <canvas id="signal" width="400" height="200"></canvas>
+    <div id="svg"></div>
+    <div class="controls">
+      <button id="mHz">-1 Hz</button> <button id="mcHz">-0.01 Hz</button>
+      <span id="fHz"></span>
+      <button id="pcHz">+0.01 Hz</button> <button id="pHz">+1 Hz</button><br />
+      <button id="mO">-octave</button> <button id="mSt">-semitone</button>
+      <button id="mC">-cent</button>
+      <span id="fNote"></span>
+      <button id="pC">+cent</button>
+      <button id="pSt">+semitone</button> <button id="pO">+octave</button><br />
+    </div>
   </body>
 </html>

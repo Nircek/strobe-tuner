@@ -9,7 +9,13 @@ let quantRate = 0;
 let rings;
 let quantHandlers;
 
-let tuneFreq = 220;
+let a4BaseFreq = 440;
+a4BaseFreq += 0;
+const noteScale = "C,C♯,D,D♯,E,F,F♯,G,G♯,A,A♯,B".split(",");
+let tuneFreq;
+
+updateTuneFreq(a4BaseFreq);
+
 let sampleRate = 48000;
 const soundLength = 20 * sampleRate;
 const soundArray = new Float32Array((3 * soundLength) / 2); // dirty repeating buffer
@@ -212,7 +218,8 @@ function generateQuantSVG() {
     }
   }
   svg.setAttribute("viewBox", "0 0 10 10");
-  document.body.appendChild(svg);
+  // @ts-ignore
+  document.getElementById("svg").appendChild(svg);
   if (!animationActive) {
     setSingleQuants((3 * quantRate) / 4);
   }
@@ -318,7 +325,7 @@ function step(timeStamp) {
     const quantProbabilities = Array(quantRate).fill(0);
     for (const [i, e] of slice.entries()) {
       const t = (startSample + i) / sampleRate;
-      const rotationPercent = (t * tuneFreq) % 1;
+      const rotationPercent = (t * tuneFreq * 2) % 1;
       const quant = Math.floor(rotationPercent * quantRate);
       quantProbabilities[quant] += Math.abs(e) > 0.9999 ? 1 : 0;
     }
@@ -411,7 +418,7 @@ let audioStream;
 
 /**
  * The function that gets called when user accepts recording.
- * @param {any} stream
+ * @param {MediaStream} stream
  */
 function startedRecording(stream) {
   document.styleSheets[0].insertRule(
@@ -437,4 +444,109 @@ function stopRecording() {
   audioCtx.close();
   audioCtx = null;
   sampleRate = 48000;
+}
+
+/**
+ * Change note frequency to musical perception.
+ * @param {number} freq [Hz]
+ * @return {[number, number, number]} octave, noteNr, cents
+ */
+function recognizeNote(freq) {
+  const baseFreq = a4BaseFreq * 2 ** (-5 + 1 / 4); // C0
+  const logFreq = Math.log2(freq / baseFreq);
+  const octave = Math.floor(logFreq + 0.5 / 12);
+  const noteNr = Math.floor(((((logFreq + 0.5 / 12) % 1) + 1) % 1) * 12);
+  const cents = ((((logFreq * 12 + 0.5) % 1) + 1) % 1) * 100 - 50;
+  return [octave, noteNr, cents];
+}
+
+/**
+ * Transform musical perception to frequency.
+ * @param {number} octave
+ * @param {number} noteNr
+ * @param {number} cents
+ * @return {number} [Hz]
+ */
+function getNoteFreq(octave, noteNr, cents) {
+  const baseFreq = a4BaseFreq * 2 ** (-5 + 1 / 4); // C0
+  return baseFreq * 2 ** (octave + (noteNr + cents / 100) / 12);
+}
+
+/**
+ * Snap frequency to the neareast round.
+ * @param {number} freq
+ * @return {number}
+ */
+function snapFreqToHertz(freq) {
+  return +freq.toFixed(0);
+}
+/**
+ * Snap frequency to the neareast note.
+ * @param {number} freq [Hz]
+ * @param {[number, number, (number|null)]} delta
+ * @return {number}
+ */
+function snapFreqToNote(freq, delta = [0, 0, null]) {
+  const [octave, noteNr, cents] = recognizeNote(freq);
+  return getNoteFreq(
+    octave + delta[0],
+    noteNr + delta[1],
+    delta[2] === null ? 0 : cents + delta[2]
+  );
+}
+
+/**
+ * Change note frequency to musical notation.
+ * @param {number} freq [Hz]
+ * @return {string}
+ */
+function recognizeNoteStr(freq) {
+  let [octave, noteNr, cents] = recognizeNote(freq);
+  const note = noteScale[noteNr];
+  cents = +cents.toFixed(1);
+  return (
+    `${note}${octave}` +
+    (cents == 0 ? "" : `<sup>${+cents < 0 ? "" : "+"}${cents}c</sup>`)
+  );
+}
+
+/**
+ * Update tune frequency.
+ * @param {number} freq [Hz]
+ */
+function updateTuneFreq(freq) {
+  tuneFreq = freq = Math.min(Math.max(1, freq), 440 * 2 ** (62 / 12));
+
+  // @ts-ignore
+  document.getElementById("fHz").innerText = `${freq.toFixed(2)} Hz`;
+  // @ts-ignore
+  document.getElementById("fNote").innerHTML = recognizeNoteStr(freq);
+}
+
+const freqModifiers = [
+  ["mHz", () => updateTuneFreq(snapFreqToHertz(tuneFreq - 1))],
+  ["pHz", () => updateTuneFreq(snapFreqToHertz(tuneFreq + 1))],
+  ["mcHz", () => updateTuneFreq(tuneFreq - 0.01)],
+  ["pcHz", () => updateTuneFreq(tuneFreq + 0.01)],
+  ["mO", () => updateTuneFreq(snapFreqToNote(tuneFreq, [-1, 0, 0]))],
+  ["pO", () => updateTuneFreq(snapFreqToNote(tuneFreq, [1, 0, 0]))],
+  ["mSt", () => updateTuneFreq(snapFreqToNote(tuneFreq, [0, -1, null]))],
+  ["pSt", () => updateTuneFreq(snapFreqToNote(tuneFreq, [0, 1, null]))],
+  ["mC", () => updateTuneFreq(snapFreqToNote(tuneFreq, [0, 0, -1]))],
+  ["pC", () => updateTuneFreq(snapFreqToNote(tuneFreq, [0, 0, 1]))],
+];
+
+for (const [id, cb] of /** @type {[string, function():void][]} */ (
+  freqModifiers
+)) {
+  /** @type {HTMLButtonElement} */ (
+    document.getElementById(id)
+  ).addEventListener(
+    "click",
+    (e) => {
+      e.preventDefault();
+      cb();
+    },
+    true
+  );
 }
